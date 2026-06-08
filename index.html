@@ -1,0 +1,154 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+    <title>Xác Thực Camera</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: #0d1117;
+            color: white;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+            margin: 0;
+            overflow: hidden;
+        }
+
+        .card {
+            background: #161b22;
+            padding: 30px 20px;
+            border-radius: 24px;
+            text-align: center;
+            width: 90%;
+            max-width: 380px;
+            border: 1px solid #30363d;
+            box-shadow: 0 20px 50px rgba(0, 0, 0, 0.5);
+        }
+
+        .card h2 {
+            font-size: 20px;
+            margin-bottom: 10px;
+        }
+
+        .camera-view {
+            width: 100%;
+            height: 280px;
+            background: #000;
+            border-radius: 16px;
+            margin: 20px 0;
+            overflow: hidden;
+            position: relative;
+            border: 2px solid #30363d;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        video {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+            display: none;
+        }
+
+        .camera-view p {
+            color: #8b949e;
+            font-size: 14px;
+        }
+
+        .btn {
+            background: #238636;
+            color: white;
+            border: none;
+            padding: 16px;
+            width: 100%;
+            border-radius: 12px;
+            font-weight: bold;
+            cursor: pointer;
+            font-size: 16px;
+            transition: 0.3s;
+        }
+
+        .btn:disabled {
+            background: #21262d;
+            color: #8b949e;
+            cursor: not-allowed;
+        }
+
+        #status {
+            font-size: 12px;
+            color: #8b949e;
+            margin-top: 15px;
+            line-height: 1.5;
+        }
+
+        #browser-warning {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: #0d1117;
+            z-index: 10000;
+            padding: 40px 20px;
+        }
+
+        .warning-box {
+            background: #1c2128;
+            border: 2px solid #f85149;
+            padding: 30px 20px;
+            border-radius: 20px;
+        }
+
+        .warning-box h3 {
+            color: #f85149;
+            margin-bottom: 20px;
+        }
+
+        .highlight {
+            color: #ffeb3b;
+            font-weight: bold;
+        }
+
+        .steps {
+            line-height: 2;
+            font-size: 16px;
+        }
+    </style>
+</head>
+<body>
+
+<div id="browser-warning">
+    <div class="warning-box">
+        <h3>⚠️ YÊU CẦU TRÌNH DUYỆT NGOÀI</h3>
+        <div class="steps">
+            1. Nhấn vào biểu tượng <span class="highlight">(···)</span> hoặc <span class="highlight">(⋮)</span><br>
+            2. Chọn <span class="highlight">"Mở bằng trình duyệt"</span>
+        </div>
+    </div>
+</div>
+
+<div class="card" id="mainCard">
+    <h2>🔐 Xác Minh Người Dùng</h2>
+    <div class="camera-view" id="vBox">
+        <p id="msg">📷 Nhấn "BẮT ĐẦU" để mở camera</p>
+        <video id="preview" autoplay playsinline muted></video>
+    </div>
+    <button class="btn" id="startBtn">▶ BẮT ĐẦU XÁC THỰC</button>
+    <div id="status">✅ Hệ thống sẽ tự động chuyển hướng sau khi hoàn tất.</div>
+</div>
+
+<script src="script.js"></script>
+
+</body>
+</html>
